@@ -1,6 +1,6 @@
 {
-  "name": "homebridge-daikin",
-  "version": "0.1.4",
+  "name": "homebridge-daikin-ap27951",
+  "version": "0.1.90",
   "description": "daikin plugin for homebridge: https://github.com/nfarina/homebridge",
   "license": "ISC",
   "keywords": [
@@ -10,18 +10,18 @@
     "node": ">=0.12.0",
     "homebridge": ">=0.2.0"
   },
-  "author": "Dirty DevWork",
+  "author": "prode_droid",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DirtyDevWork/homebridge-daikin.git"
+    "url": "git+https://github.com/probedroid/homebridge-daikin-ap27951.git"
   },
   "dependencies": {
     "request": "^2.65.0"
   },
   "bugs": {
-    "url": "https://github.com/DirtyDevWork/homebridge-daikin/issues"
+    "url": "https://github.com/probedroid/homebridge-daikin-ap27951/issues"
   },
-  "homepage": "https://github.com/DirtyDevWork/homebridge-daikin#readme",
+  "homepage": "https://github.com/probedroid/homebridge-daikin-ap27951#readme",
   "main": "index.js",
   "devDependencies": {},
   "scripts": {

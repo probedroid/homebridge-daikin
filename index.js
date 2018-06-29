@@ -1,7 +1,7 @@
 /*
 {
     "bridge": {
-    	...
+        ...
     },
 
     "description": "...",
@@ -32,6 +32,7 @@ module.exports = function(homebridge){
 
 function Daikin(log, config) {
 	this.log = log;
+	this.waitForRequest = false;
 
 	this.name = config.name;
 	this.apiroute = config.apiroute || "apiroute";
@@ -61,6 +62,7 @@ function Daikin(log, config) {
 	//Characteristic.TargetHeatingCoolingState.AUTO = 3;
 	this.targetHeatingCoolingState = Characteristic.TargetHeatingCoolingState.AUTO;
 	
+	this.getCurrentHeatingCoolingState(function (){});
 	this.service = new Service.Thermostat(this.name);
 }
 
@@ -115,9 +117,9 @@ Daikin.prototype = {
 			url: this.apiroute+"/aircon/get_control_info"
 		}, function(err, response, body) {
 			if (!err && response.statusCode == 200) {
-				this.log("response success");
+				this.log("getCurrentHeatingCoolingState: response success");
 				var json = JSON.parse(convertDaikinToJSON(body)); //{"pow":"1","mode":3,"stemp":"21","shum":"34.10"}
-				this.log("Heating state is %s", json.mode);
+				this.log("Heating state is %s, pow is %s", json.mode, json.pow);
 				if (json.pow == "0"){
 					// The Daikin is off
 					this.state = Characteristic.CurrentHeatingCoolingState.OFF;
@@ -166,10 +168,22 @@ Daikin.prototype = {
 		callback(error, this.targetHeatingCoolingState);
 	},
 	setTargetHeatingCoolingState: function(value, callback) {
+		var self = this;
 		this.log("setTargetHeatingCoolingState from/to:" + this.targetHeatingCoolingState + "/" + value);
 		this.targetHeatingCoolingState = value;
-		var cBack = this.setDaikinMode();
-		callback(cBack);
+		/*var cBack = this.setDaikinMode();
+		callback(cBack);*/
+		this.log("setTargetHeatingCoolingState: waitForRequest %s", this.waitForRequest);
+ 		if (!this.waitForRequest) {
+                        this.waitForRequest = true;
+                        setTimeout(function(){
+ 					self.log("setTargetHeatingCoolingState: setting timeout to command");
+                                        var cBack = self.setDaikinMode();
+                                        callback(cBack);
+                                        },1000);
+                } else {
+                        callback(null);
+		}
 	},
 	getCurrentTemperature: function(callback) {
 		this.log("getCurrentTemperature from:", this.apiroute+"/aircon/get_sensor_info");
@@ -177,7 +191,7 @@ Daikin.prototype = {
 			url: this.apiroute+"/aircon/get_sensor_info"
 		}, function(err, response, body) {
 			if (!err && response.statusCode == 200) {
-				this.log("response success");
+				this.log("getCurrentTemperature:response success");
 				var json = JSON.parse(convertDaikinToJSON(body)); //{"ret":"OK","htemp":"24.0","hhum""-","otemp":"-","err":"0","cmpfreq":"0"}
 				this.log("Daikin mode is %s, currently %s degrees", this.currentHeatingCoolingState, json.htemp);
 				this.temperature = parseFloat(json.htemp);
@@ -194,7 +208,7 @@ Daikin.prototype = {
 			url: this.apiroute+"/aircon/get_control_info"
 		}, function(err, response, body) {
 			if (!err && response.statusCode == 200) {
-				this.log("response success");
+				this.log("getTargetTemperature:response success");
 				var json = JSON.parse(convertDaikinToJSON(body)); //{"state":"OFF","stateCode":5,"temperature":"18.10","humidity":"34.10"}
 				this.targetTemperature = parseFloat(json.stemp);
 				this.log("Target temperature is %s", this.targetTemperature);
@@ -206,10 +220,23 @@ Daikin.prototype = {
 		}.bind(this));
 	},
 	setTargetTemperature: function(value, callback) {
+		var self = this;
 		this.log("setTargetTemperature to " + value);
 		this.targetTemperature = value;
-		var cBack = this.setDaikinMode();
-		callback(cBack);
+		/*var cBack = this.setDaikinMode();
+		callback(cBack);*/
+		this.log("setTargetTemperature: waitForRequest %s", this.waitForRequest);
+ 		
+ 		if (!this.waitForRequest){
+ 			this.waitForRequest = true;
+ 			setTimeout(function () { 
+ 					self.log("setTargetTemperature: setting timeout to command");
+ 					var cBack = self.setDaikinMode();
+ 					callback(cBack);
+ 					} , 1000);
+ 		} else {
+ 			callback(null);
+		}
 	},
 	getTemperatureDisplayUnits: function(callback) {
 		this.log("getTemperatureDisplayUnits:", this.temperatureDisplayUnits);
@@ -231,7 +258,7 @@ Daikin.prototype = {
 					url: this.apiroute+"/aircon/get_control_info"
 		}, function(err, response, body) {
 			if (!err && response.statusCode == 200) {
-				this.log("response success");
+				this.log("getCurrentRelativeHumidity: response success");
 				var json = JSON.parse(body); //{"state":"OFF","stateCode":5,"temperature":"18.10","humidity":"34.10"}
 				this.log("Humidity state is %s (%s)", json.state, json.humidity);
 				this.relativeHumidity = parseFloat(json.humidity);
@@ -281,7 +308,7 @@ Daikin.prototype = {
 			.setCharacteristic(Characteristic.Manufacturer, "Daikin")
 			.setCharacteristic(Characteristic.Model, this.model)
 			.setCharacteristic(Characteristic.FirmwareRevision, this.firmwareRevision)
-			.setCharacteristic(Characteristic.SerialNumber, "HTTP Serial Number");
+			.setCharacteristic(Characteristic.SerialNumber, this.serialNumber);
 
 		// Required Characteristics
 		this.service
@@ -340,12 +367,15 @@ Daikin.prototype = {
 		var mode; // 0, 1, 2, 3, 4, 6 or 7
 		var stemp; // Int for degrees in Celcius
 		var result;
+
+		this.log("setDaikinMode: resetting waitForRequest %s",this.waitForRequest);
+ 		this.waitForRequest=false;
 		
 		// This sets up the Power and Mode parameters
 		switch(this.targetHeatingCoolingState) {
 			case Characteristic.TargetHeatingCoolingState.OFF:
 			pow = "?pow=0";
-			mode = "&mode=4";
+			mode = "&mode=0";
 			break;
 			
 			case Characteristic.TargetHeatingCoolingState.HEAT: //"4"
@@ -365,7 +395,7 @@ Daikin.prototype = {
 			
 			default:
 			pow = "?pow=0";
-			mode = "&mode=4";
+			mode = "&mode=0";
 			this.log("Not handled case:", this.targetHeatingCoolingState);
 			break;
 		}
@@ -379,7 +409,7 @@ Daikin.prototype = {
 			url: this.apiroute + "/aircon/set_control_info" + pow + mode + sTemp + "&shum=0"
 		}, function(err, response, body) {
 			if (!err && response.statusCode == 200) {
-				this.log("response success");
+				this.log("setDaikinMode: response success");
 				result = null; // success
 			} else {
 				this.log("Error getting state: %s", err);
@@ -390,13 +420,17 @@ Daikin.prototype = {
 	},
 	
 	getModelInfo: function() {
+		//req.setTimeout(10000, function () {
+		//	req.connection.destroy();
+		//});
+
 		// A parser for the model details will be coded here, returning the Firmware Revision, and if not set in the config
 		// file, the Name and Model as well
 		request.get({
 			url: this.apiroute+"/aircon/get_model_info"
 		}, function(err, response, body) {
 			if (!err && response.statusCode == 200) {
-				this.log("response success");
+				this.log("getModelInfo: response success");
 				var json = JSON.parse(convertDaikinToJSON(body)); //{"pow":"1","mode":3,"stemp":"21","shum":"34.10"}
 				this.log("Your Model is: " + json.model);
 				
@@ -421,6 +455,8 @@ Daikin.prototype = {
 					// Need to convert a series of Hexadecimal values to ASCII characters here
 				}
 				
+				this.model = json.name;
+				this.serialNumber = json.mac;
 				this.firmwareRevision = replaceAll(json.ver, "_", ".");
 				
 				this.log("Set firmware version to " + this.firmwareRevision);
